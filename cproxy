@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""
+MIT License
+Copyright (c) 2024 Md BELLOUCH (mdbellouch)
+"""
+
+# Created by: Md BELLOUCH
+# GitHub: mdbellouch
+# IG: s3j_.4
+
+import subprocess
+import json
+import os
+import sys
+
+# --- ANSI COLORS ---
+G = '\033[92m'  # Green
+Y = '\033[93m'  # Yellow
+R = '\033[91m'  # Red
+C = '\033[96m'  # Cyan
+B = '\033[1m'   # Bold
+E = '\033[0m'   # End
+
+CONFIG_DIR = os.path.expanduser("~/.config/cosmic-proxy")
+PROFILES_FILE = os.path.join(CONFIG_DIR, "profiles.json")
+
+class ProxyManager:
+    def __init__(self):
+        if not os.path.exists(CONFIG_DIR):
+            os.makedirs(CONFIG_DIR, mode=0o700, exist_ok=True)
+        self.profiles = self._load_profiles()
+
+    def _load_profiles(self):
+        if os.path.exists(PROFILES_FILE):
+            with open(PROFILES_FILE, 'r') as f:
+                return json.load(f)
+        return {}
+
+    def _save_profiles(self):
+        with open(PROFILES_FILE, 'w') as f:
+            json.dump(self.profiles, f, indent=4)
+        os.chmod(PROFILES_FILE, 0o600)
+
+    def run_cmd(self, cmd):
+        try:
+            subprocess.run(cmd, shell=True, check=True, capture_output=True)
+        except subprocess.CalledProcessError:
+            print(f"{R}[!] Fatal: System settings rejected the command.{E}")
+
+    def get_setting(self, schema, key):
+        try:
+            res = subprocess.run(f"gsettings get {schema} {key}", shell=True, capture_output=True, text=True, check=True)
+            return res.stdout.strip().strip("'")
+        except subprocess.CalledProcessError:
+            return "Unknown"
+
+    def show_status(self):
+        mode = self.get_setting("org.gnome.system.proxy", "mode")
+        http_host = self.get_setting("org.gnome.system.proxy.http", "host")
+        http_port = self.get_setting("org.gnome.system.proxy.http", "port")
+        socks_host = self.get_setting("org.gnome.system.proxy.socks", "host")
+        socks_port = self.get_setting("org.gnome.system.proxy.socks", "port")
+
+        print(f"\n{B}{C}=== LIVE SYSTEM STATUS ==={E}")
+        if mode == "manual":
+            print(f"{B}State:{E} {G}[ ACTIVE ]{E}")
+            print(f" {Y}>>{E} HTTP:  {http_host}:{http_port}")
+            print(f" {Y}>>{E} SOCKS: {socks_host}:{socks_port}")
+        elif mode == "none":
+            print(f"{B}State:{E} {R}[ OFFLINE ]{E}")
+        else:
+            print(f"{B}State:{E} {Y}[ {mode.upper()} ]{E}")
+
+    def toggle(self, status):
+        mode = "manual" if status else "none"
+        self.run_cmd(f"gsettings set org.gnome.system.proxy mode '{mode}'")
+        state = f"{G}ENABLED{E}" if status else f"{R}DISABLED{E}"
+        print(f"\n{B}System Status:{E} Proxy is now {state}")
+
+    def apply_settings(self, host, port, p_type, user=None, password=None):
+        if p_type == "http":
+            schema = "org.gnome.system.proxy.http"
+            self.run_cmd(f"gsettings set {schema} host '{host}'")
+            self.run_cmd(f"gsettings set {schema} port {port}")
+            if user and password:
+                self.run_cmd(f"gsettings set {schema} use-authentication true")
+                self.run_cmd(f"gsettings set {schema} authentication-user '{user}'")
+                self.run_cmd(f"gsettings set {schema} authentication-password '{password}'")
+            else:
+                self.run_cmd(f"gsettings set {schema} use-authentication false")
+            self.run_cmd(f"gsettings set org.gnome.system.proxy.https host '{host}'")
+            self.run_cmd(f"gsettings set org.gnome.system.proxy.https port {port}")
+        else:
+            self.run_cmd(f"gsettings set org.gnome.system.proxy.socks host '{host}'")
+            self.run_cmd(f"gsettings set org.gnome.system.proxy.socks port {port}")
+        self.toggle(True)
+
+def clear():
+    os.system('clear' if os.name == 'posix' else 'cls')
+
+def banner():
+    art = r"""
+ ██████╗ ██████╗ ███████╗███╗   ███╗██╗ ██████╗    ██████╗ ██████╗  ██████╗ ██╗  ██╗██╗   ██╗
+██╔════╝██╔═══██╗██╔════╝████╗ ████║██║██╔════╝    ██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝╚██╗ ██╔╝
+██║     ██║   ██║███████╗██╔████╔██║██║██║         ██████╔╝██████╔╝██║   ██║ ╚███╔╝  ╚████╔╝ 
+██║     ██║   ██║╚════██║██║╚██╔╝██║██║██║         ██╔═══╝ ██╔══██╗██║   ██║ ██╔██╗   ╚██╔╝  
+╚██████╗╚██████╔╝███████║██║ ╚═╝ ██║██║╚██████╗    ██║     ██║  ██║╚██████╔╝██╔╝ ██╗   ██║   
+ ╚═════╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝    ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝"""
+    print(f"{G}{art}{E}")
+    print(f"    {B}{Y}Created by: Md BELLOUCH{E}")
+    print(f"    {C}GitHub: mdbellouch | IG: s3j_.4{E}")
+    print(f"    {G}--------------------------------------------------------------------------------------{E}")
+
+def menu():
+    mgr = ProxyManager()
+    while True:
+        banner()
+        print(f"{B}[1]{E} {G}Power On{E}      {B}[2]{E} {R}Power Off{E}     {B}[3]{E} {C}Status{E}")
+        print(f"{B}[4]{E} Manual Setup  {B}[5]{E} Save Profile  {B}[6]{E} Load Profile")
+        print(f"{B}[7]{E} Exit")
+        
+        choice = input(f"\n{G}mdbellouch@cproxy:{C}~/menu${E} ")
+
+        if choice == '1': mgr.toggle(True)
+        elif choice == '2': mgr.toggle(False)
+        elif choice == '3': mgr.show_status()
+        elif choice == '4':
+            host = input(f"{C}Host: {E}")
+            port = input(f"{C}Port: {E}")
+            ptype = input(f"{C}Type (http/socks) [http]: {E}") or "http"
+            user = input(f"{C}User: {E}")
+            pw = input(f"{C}Pass: {E}") if user else None
+            mgr.apply_settings(host, port, ptype, user, pw)
+        elif choice == '5':
+            name = input(f"{Y}Profile Name: {E}")
+            host = input(f"{C}Host: {E}")
+            port = input(f"{C}Port: {E}")
+            ptype = input(f"{C}Type: {E}")
+            user = input(f"{C}User: {E}")
+            pw = input(f"{C}Pass: {E}") if user else None
+            mgr.profiles[name] = {"host": host, "port": port, "type": ptype, "user": user, "pass": pw}
+            mgr._save_profiles()
+        elif choice == '6':
+            for p in mgr.profiles.keys(): print(f" {G}>>{E} {p}")
+            name = input(f"\n{Y}Select Profile: {E}")
+            if name in mgr.profiles:
+                p = mgr.profiles[name]
+                mgr.apply_settings(p['host'], p['port'], p['type'], p.get('user'), p.get('pass'))
+        elif choice == '7': break
+        
+        input(f"\n{B}Press [Enter] to return...{E}")
+        clear()
+
+if __name__ == "__main__":
+    try:
+        clear()
+        menu()
+    except KeyboardInterrupt:
+        sys.exit()
